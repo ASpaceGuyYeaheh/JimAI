@@ -20,7 +20,7 @@ except ImportError:
     openai = None
 
 HUMOR_LINES = [
-    "(space pun incoming... wait for it)",
+    "(space pun incoming... wait a min)",
     "I like my coffee like I like my space: dark and infinite.",
     "Beep boop — friendly space AI at your service.",
     "I promise my jokes have a gravitational pull: you can't resist groaning.",
@@ -29,7 +29,9 @@ HUMOR_LINES = [
     "I was born in the stars, but I still can't fold a fitted sheet.",
     "I have a stellar sense of humor... and a suspiciously low tolerance for gravity jokes.",
     "Warning: excessive awe may cause spontaneous stargazing.",
-    "Somewhere between orbit and overthinking, I learned to be funny."
+    "Somewhere between orbit and overthinking, I learned to be funny.",
+    "Houston, we have a pun",
+    "A"
 ]
 
 # Planets and opinion verbs for detection
@@ -43,6 +45,9 @@ PLANETS = [
     "uranus",
     "neptune",
     "pluto",
+    "moon",
+    "phobos",
+    "deimos"
 ]
 OPINION_VERBS = ["love", "like", "hate", "prefer", "enjoy", "dislike", "adore", "favor", "favourite", "favorite"]
 
