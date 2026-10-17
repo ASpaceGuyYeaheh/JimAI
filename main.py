@@ -18,13 +18,22 @@ except ImportError:
 def simple_reply(user_input: str, memories: list) -> str:
     """A fallback local reply system for beginners.
 
-    This does not use an external LLM. It reads the most recent memories
+    This does not use an external LLM. It reads the most relevant memories
     and gives a simple response based on the user's message.
     """
     cleaned = user_input.strip()
 
     if not cleaned:
         return "I didn't catch that. Try asking me something else."
+
+    # If the user asked a question, and we have relevant memories, show them
+    if cleaned.endswith("?") and memories:
+        lines = "\n".join(f"- {m.get('text', '')}" for m in memories[:5])
+        return (
+            f"I found these memories related to your question:\n{lines}\n\n"
+            "Based on these, here's a short answer: "
+            "(I'm a simple assistant, so this is a brief response. Try adding more details.)"
+        )
 
     if memories:
         recent = "\n".join(f"- {m.get('text', '')}" for m in memories[:3])
@@ -84,8 +93,17 @@ def main() -> None:
         # Save a general memory for important things
         memory.add(f"User said: {user_input} at {datetime.now().isoformat(timespec='seconds')}")
 
-        recent_memories = memory.get_recent(limit=5)
-        response = llm_reply(user_input, recent_memories)
+        # If this is a question (ends with a '?'), try to find relevant memories
+        is_question = user_input.strip().endswith("?")
+        relevant_memories = memory.find_relevant(user_input, limit=5) if is_question else []
+
+        # Use relevant memories first (if any), otherwise use the most recent ones
+        if relevant_memories:
+            context_memories = relevant_memories
+        else:
+            context_memories = memory.get_recent(limit=5)
+
+        response = llm_reply(user_input, context_memories)
         print(f"JimAI: {response}")
 
 
