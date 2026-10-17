@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import re
 
 STOPWORDS = {
@@ -85,12 +85,24 @@ class Memory:
         parts = [p for p in cleaned.split() if len(p) > 2 and p not in STOPWORDS]
         return parts
 
-    def find_relevant(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+    def _clean_memory_text(self, text: str) -> str:
+        """Remove wrapper prefixes like 'User said:' and trailing timestamp ' at YYYY-MM-DDTHH:MM:SS'.
+
+        Returns a cleaned, human-friendly version of a saved memory text.
+        """
+        if not text:
+            return ""
+
+        cleaned = re.sub(r"^(User said:|Told user a fact:)\s*", "", text, flags=re.IGNORECASE)
+        # remove trailing ' at 2026-10-17T16:43:11' style timestamp
+        cleaned = re.sub(r"\s+at\s+\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", "", cleaned)
+        return cleaned.strip()
+
+    def find_relevant(self, query: str, limit: int = 5, exclude_text: Optional[str] = None) -> List[Dict[str, Any]]:
         """Find memories that are most relevant to the query using simple keyword matching.
 
-        This is intentionally simple for beginners: it scores each memory by how many
-        keywords from the query appear in the memory text. Returns up to `limit` items
-        with the highest scores.
+        Optionally exclude memories that match or contain `exclude_text` to avoid
+        returning the user's current question as a memory match.
         """
         if not query or not self.memories:
             return []
@@ -99,10 +111,19 @@ class Memory:
         if not keywords:
             return []
 
+        exclude_norm = (exclude_text or "").lower().strip()
+        # normalize exclude by removing surrounding punctuation
+        exclude_norm = re.sub(r"[^a-zA-Z0-9\s]", " ", exclude_norm)
+
         scores = []  # tuples (score, index, memory)
 
         for i, memory in enumerate(self.memories):
-            text = memory.get("text", "").lower()
+            raw_text = memory.get("text", "")
+            # skip exact/near-exact matches to the input so questions don't match themselves
+            if exclude_norm and exclude_norm in re.sub(r"[^a-zA-Z0-9\s]", " ", raw_text.lower()):
+                continue
+
+            text = raw_text.lower()
             score = 0
             for kw in keywords:
                 # count simple occurrences

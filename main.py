@@ -122,8 +122,8 @@ def main() -> None:
         if not is_question:
             memory.add(f"User said: {user_input} at {datetime.now().isoformat(timespec='seconds')}")
 
-        # If no KB match, try user memories for questions
-        relevant_memories = memory.find_relevant(user_input, limit=5) if is_question else []
+        # If no KB match, try user memories for questions (exclude the current input to avoid matches)
+        relevant_memories = memory.find_relevant(user_input, limit=5, exclude_text=user_input) if is_question else []
 
         # Use relevant memories first (if any), otherwise use the most recent ones
         if relevant_memories:
@@ -131,7 +131,12 @@ def main() -> None:
         else:
             context_memories = memory.get_recent(limit=5)
 
-        response = llm_reply(user_input, context_memories)
+        # Create a cleaned context so displayed/replied memory text is friendly (no 'User said:' wrappers)
+        cleaned_context = [
+            {"text": memory._clean_memory_text(m.get("text", "")), "created_at": m.get("created_at")} for m in context_memories
+        ]
+
+        response = llm_reply(user_input, cleaned_context)
         print(f"JimAI: {response}")
 
 
