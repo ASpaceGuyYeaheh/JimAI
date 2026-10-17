@@ -8,13 +8,19 @@
     "text": "Mercury is the closest planet to the Sun and has a very thin atmosphere, causing extreme temperature changes."
   },
   {
-    "id": "venus-fact",
+    "id": "venus-fact1",
     "text": "Venus has a thick, toxic atmosphere and surface temperatures hot enough to melt lead — it's the hottest planet in the solar system."
   },
   {
-    "id": "earth-fact",
+    "id": "venus-fact2"
+    "text": "Humans once landed probes on the surface of Venus, the most notable being Venera 13."
+  {
+    "id": "earth-fact1",
     "text": "Earth is the only known planet with liquid water on its surface and life as we know it."
   },
+  {
+    "id": "earth-fact2"
+    "text": "Earth is the 3rd planet from the sun, taking 365 days to orbit it!"
   {
     "id": "moon-size",
     "text": "The Moon is about 1/4 the diameter of Earth, which is why lunar eclipses still cover the Sun from our view."
@@ -41,24 +47,7 @@
   },
   {
     "id": "pluto-fact",
-    "text": "Pluto is a dwarf planet in the Kuiper Belt; it was reclassified from a planet in 2006."
-  },
-  {
-    "id": "light-speed",
-    "text": "Light from the Sun takes about 8 minutes and 20 seconds to reach Earth."
-  },
-  {
-    "id": "black-holes",
-    "text": "Black holes aren't cosmic vacuum cleaners; objects need to get very close to be pulled in."
-  },
-  {
-    "id": "space-vacuum",
-    "text": "Space is nearly a perfect vacuum, which is why sound can't travel there."
-  },
-  {
-    "id": "international-space-station",
-    "text": "The International Space Station travels around Earth approximately every 90 minutes."
-  },
+    "text": "Pluto is a dwarf planet in the Kuiper Belt; it was reclassified in 2006"
   {
     "id": "universe-expansion",
     "text": "The universe has been expanding since the Big Bang about 13.8 billion years ago."
