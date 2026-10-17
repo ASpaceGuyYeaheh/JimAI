@@ -259,26 +259,37 @@ def main() -> None:
         # Determine if this is a question
         is_question = user_input.strip().endswith("?")
 
-        # If it's a question, prefer built-in knowledge for space questions (planet-priority handled inside)
-        if is_question:
-            planet_mentioned = detect_planet_only(user_input)
-            kb_matches = kb.find_relevant(user_input, limit=5)
-            if kb_matches:
-                # prefer fact explicitly mentioning the planet if present
-                chosen_fact = None
-                if planet_mentioned:
-                    for fact in kb_matches:
-                        if re.search(r"\b" + re.escape(planet_mentioned) + r"\b", fact.get("text", "").lower()):
-                            chosen_fact = fact.get("text")
-                            break
-                if not chosen_fact:
-                    chosen_fact = kb_matches[0].get("text")
-                humor = random.choice(HUMOR_LINES)
-                memory.add(f"Told user a fact: {chosen_fact} at {datetime.now().isoformat(timespec='seconds')}")
-                reply = f"{chosen_fact}\n\n{humor}"
-                print(f"JimAI: {reply}")
-                push_turn(chat_history, "assistant", reply)
-                continue
+     # If it's a question, prefer built-in knowledge for space questions (planet-priority handled inside)
+if is_question:
+    planet_mentioned = detect_planet_only(user_input)
+    # first try to find KB facts that explicitly mention the planet (strong preference)
+    if planet_mentioned:
+        planet_lower = planet_mentioned.lower()
+        planet_facts = [
+            fact for fact in kb.get_all()
+            if re.search(r"\b" + re.escape(planet_lower) + r"\b", fact.get("text", "").lower())
+        ]
+        if planet_facts:
+            # choose the fact where the planet appears earliest (usually more directly about that planet)
+            best = min(planet_facts, key=lambda f: f.get("text", "").lower().find(planet_lower))
+            chosen_fact = best.get("text")
+            humor = random.choice(HUMOR_LINES)
+            memory.add(f"Told user a fact: {chosen_fact} at {datetime.now().isoformat(timespec='seconds')}")
+            reply = f"{chosen_fact}\n\n{humor}"
+            print(f"JimAI: {reply}")
+            push_turn(chat_history, "assistant", reply)
+            continue
+
+    # fallback: use the existing relevance-based KB lookup
+    kb_matches = kb.find_relevant(user_input, limit=5)
+    if kb_matches:
+        chosen_fact = kb_matches[0].get("text")
+        humor = random.choice(HUMOR_LINES)
+        memory.add(f"Told user a fact: {chosen_fact} at {datetime.now().isoformat(timespec='seconds')}")
+        reply = f"{chosen_fact}\n\n{humor}"
+        print(f"JimAI: {reply}")
+        push_turn(chat_history, "assistant", reply)
+        continue
 
         # If not question: check for planet-opinion (do this before general "i"/"my" detection)
         planet, verb = detect_planet_opinion(user_input)
