@@ -21,6 +21,12 @@ HUMOR_LINES = [
     "I like my coffee like I like my space: dark and infinite.",
     "Beep boop — friendly space AI at your service.",
     "I promise my jokes have a gravitational pull: you can't resist groaning.",
+    "I may not have a rocket, but I do have excellent delivery.",
+    "My cosmic timing is impeccable, unlike my ability to find the right sock.",
+    "I was born in the stars, but I still can't fold a fitted sheet.",
+    "I have a stellar sense of humor... and a suspiciously low tolerance for gravity jokes.",
+    "Warning: excessive awe may cause spontaneous stargazing.",
+    "Somewhere between orbit and overthinking, I learned to be funny."
 ]
 
 
@@ -100,21 +106,21 @@ def main() -> None:
             print("JimAI: Goodbye! I’ll remember what we discussed.")
             break
 
-        # Save a general memory for important things
-        memory.add(f"User said: {user_input} at {datetime.now().isoformat(timespec='seconds')}")
-
+        # Determine if this is a question first
         is_question = user_input.strip().endswith("?")
 
         # Prefer built-in knowledge for space questions
         kb_matches = kb.find_relevant(user_input, limit=3) if is_question else []
         if kb_matches:
-            # Use the top fact and add a humorous line
             fact = kb_matches[0].get("text")
             humor = random.choice(HUMOR_LINES)
-            # Also store that we told the user this fact
             memory.add(f"Told user a fact: {fact} at {datetime.now().isoformat(timespec='seconds')}")
             print(f"JimAI: {fact} \n\n{humor}")
             continue
+
+        # Only save the user's message as a memory if it's NOT a question
+        if not is_question:
+            memory.add(f"User said: {user_input} at {datetime.now().isoformat(timespec='seconds')}")
 
         # If no KB match, try user memories for questions
         relevant_memories = memory.find_relevant(user_input, limit=5) if is_question else []
