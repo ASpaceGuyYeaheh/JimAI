@@ -1,0 +1,34 @@
+[
+  {
+    "id": "sun-mass",
+    "text": "The Sun contains about 99.86% of the mass in the solar system."
+  },
+  {
+    "id": "moon-size",
+    "text": "The Moon is about 1/4 the diameter of Earth, which is why lunar eclipses still cover the Sun from our view."
+  },
+  {
+    "id": "light-speed",
+    "text": "Light from the Sun takes about 8 minutes and 20 seconds to reach Earth."
+  },
+  {
+    "id": "black-holes",
+    "text": "Black holes aren't cosmic vacuum cleaners; objects need to get very close to be pulled in."
+  },
+  {
+    "id": "space-vacuum",
+    "text": "Space is nearly a perfect vacuum, which is why sound can't travel there."
+  },
+  {
+    "id": "international-space-station",
+    "text": "The International Space Station travels around Earth approximately every 90 minutes."
+  },
+  {
+    "id": "mars-day",
+    "text": "A day on Mars (a 'sol') is about 24 hours and 39 minutes — very close to an Earth day."
+  },
+  {
+    "id": "universe-expansion",
+    "text": "The universe has been expanding since the Big Bang about 13.8 billion years ago."
+  }
+]

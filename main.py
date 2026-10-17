@@ -1,7 +1,9 @@
 import os
+import random
 from datetime import datetime
 
 from memory import Memory
+from knowledge import KnowledgeBase
 
 try:
     from dotenv import load_dotenv
@@ -14,25 +16,31 @@ try:
 except ImportError:
     openai = None
 
+HUMOR_LINES = [
+    "(space pun incoming... wait for it)",
+    "I like my coffee like I like my space: dark and infinite.",
+    "Beep boop — friendly space AI at your service.",
+    "I promise my jokes have a gravitational pull: you can't resist groaning.",
+]
+
 
 def simple_reply(user_input: str, memories: list) -> str:
     """A fallback local reply system for beginners.
 
-    This does not use an external LLM. It reads the most relevant memories
-    and gives a simple response based on the user's message.
+    If the user asks a question, and we have a relevant memory or fact,
+    we show it. Otherwise, we fall back to friendly canned replies.
     """
     cleaned = user_input.strip()
 
     if not cleaned:
         return "I didn't catch that. Try asking me something else."
 
-    # If the user asked a question, and we have relevant memories, show them
     if cleaned.endswith("?") and memories:
         lines = "\n".join(f"- {m.get('text', '')}" for m in memories[:5])
+        humor = random.choice(HUMOR_LINES)
         return (
             f"I found these memories related to your question:\n{lines}\n\n"
-            "Based on these, here's a short answer: "
-            "(I'm a simple assistant, so this is a brief response. Try adding more details.)"
+            f"Short answer: (from my memory)\n{lines.splitlines()[0]}\n\n{humor}"
         )
 
     if memories:
@@ -40,14 +48,14 @@ def simple_reply(user_input: str, memories: list) -> str:
         return (
             f"I remember: {recent}\n\n"
             f"You said: {cleaned}\n"
-            f"I can keep that in mind and respond based on it."
+            f"I can keep that in mind and respond based on it. {random.choice(HUMOR_LINES)}"
         )
 
     if "hello" in cleaned.lower() or "hi" in cleaned.lower():
-        return "Hi! I’m JimAI. I can remember things and talk with you. What would you like to do today?"
+        return "Hi! I’m JimAI, your space-savvy assistant with a sense of humor. Ask me about planets, stars, or ask me anything else."
 
     if "your name" in cleaned.lower() or "who are you" in cleaned.lower():
-        return "I’m JimAI, your beginner-friendly AI assistant. I like to remember things and chat with you."
+        return "I’m JimAI, a space AI who remembers things and likes to crack (mild) space jokes."
 
     return (
         f"Thanks for saying: \"{cleaned}\". "
@@ -62,13 +70,13 @@ def llm_reply(user_input: str, memories: list) -> str:
 
     memory_context = "\n".join(f"- {m.get('text', '')}" for m in memories[:5])
 
-    prompt = f"You are JimAI, a helpful AI assistant. Keep replies short and friendly.\n\nRelevant memories:\n{memory_context or 'No previous memories.'}\n\nUser: {user_input}\nAI:"
+    prompt = f"You are JimAI, a helpful space-savvy AI assistant. Keep replies short and friendly and add a little humor when appropriate.\n\nRelevant memories:\n{memory_context or 'No previous memories.'}\n\nUser: {user_input}\nAI:"
 
     try:
         response = openai.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are JimAI, a friendly AI assistant with memory."},
+                {"role": "system", "content": "You are JimAI, a friendly space AI with memory."},
                 {"role": "user", "content": prompt},
             ],
             temperature=0.7,
@@ -81,7 +89,9 @@ def llm_reply(user_input: str, memories: list) -> str:
 
 def main() -> None:
     memory = Memory("memory.json")
-    print("JimAI: Hello! I can remember things. Type 'exit' to stop.")
+    kb = KnowledgeBase("space_facts.json")
+
+    print("JimAI: Hello! I can remember things and I know some space facts. Type 'exit' to stop.")
 
     while True:
         user_input = input("You: ")
@@ -93,8 +103,20 @@ def main() -> None:
         # Save a general memory for important things
         memory.add(f"User said: {user_input} at {datetime.now().isoformat(timespec='seconds')}")
 
-        # If this is a question (ends with a '?'), try to find relevant memories
         is_question = user_input.strip().endswith("?")
+
+        # Prefer built-in knowledge for space questions
+        kb_matches = kb.find_relevant(user_input, limit=3) if is_question else []
+        if kb_matches:
+            # Use the top fact and add a humorous line
+            fact = kb_matches[0].get("text")
+            humor = random.choice(HUMOR_LINES)
+            # Also store that we told the user this fact
+            memory.add(f"Told user a fact: {fact} at {datetime.now().isoformat(timespec='seconds')}")
+            print(f"JimAI: {fact} \n\n{humor}")
+            continue
+
+        # If no KB match, try user memories for questions
         relevant_memories = memory.find_relevant(user_input, limit=5) if is_question else []
 
         # Use relevant memories first (if any), otherwise use the most recent ones

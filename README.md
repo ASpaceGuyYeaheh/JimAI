@@ -1,18 +1,19 @@
 # JimAI
 
-JimAI is a beginner-friendly AI project where the assistant has a simple memory system and a chat loop.
+JimAI is a beginner-friendly space AI project: a chat assistant that remembers things and knows a few space facts.
 
 ## What it does
 
 - Stores memories in a JSON file
-- Remembers recent facts and previous conversations
-- Uses those memories when replying
-- Supports a simple offline mode
-- Can optionally use OpenAI if you provide an API key
+- Has a tiny local knowledge base of space facts (space_facts.json)
+- When you ask questions (ending with `?`), Jim will first look in the space facts and then in past memories
+- Replies use simple rules by default and can optionally call OpenAI if you provide an API key
 
 ## Project structure
 
 - `memory.py` — memory storage logic
+- `knowledge.py` — a tiny local knowledge base (space facts)
+- `space_facts.json` — some starter space facts Jim can answer from
 - `main.py` — interactive chat loop
 - `requirements.txt` — Python dependencies
 - `.gitignore` — common Python ignores
@@ -45,6 +46,15 @@ JimAI is a beginner-friendly AI project where the assistant has a simple memory 
    python main.py
    ```
 
+## Example
+
+- You: Hi Jim
+- JimAI: Hi! I’m JimAI, your space-savvy assistant with a sense of humor.
+- You: I love Jupiter
+- (Jim stores that as a memory)
+- You: What do I love?
+- JimAI: I found these memories related to your question: - User said: I love Jupiter ... \n\n Short answer: (from my memory) - User said: I love Jupiter ...
+
 ## Optional: OpenAI support
 
 Create a `.env` file or set an environment variable:
@@ -54,13 +64,3 @@ export OPENAI_API_KEY="your_key_here"
 ```
 
 Then start the app. If the key is missing, JimAI will automatically fall back to a basic local reply mode.
-
-## Beginner note
-
-This is deliberately simple and easy to extend. A later version could use:
-
-- vector embeddings for smarter memory search
-- a real LLM backend
-- a web interface
-- long-term memory persistence in a database
-
