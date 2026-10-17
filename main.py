@@ -1,8 +1,9 @@
+# main.py
 import os
 import random
 import re
 from datetime import datetime
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from memory import Memory
 from knowledge import KnowledgeBase
@@ -31,7 +32,7 @@ HUMOR_LINES = [
     "Somewhere between orbit and overthinking, I learned to be funny."
 ]
 
-# Planets and opinion verbs for detecting planet mentions with opinions
+# Planets and opinion verbs for detection
 PLANETS = [
     "mercury",
     "venus",
@@ -55,6 +56,15 @@ def push_turn(history: List[Dict[str, str]], role: str, text: str) -> None:
         history.pop(0)
 
 
+def detect_planet_only(text: str) -> Optional[str]:
+    """Return the first planet mentioned in text, or None."""
+    lower = text.lower()
+    for p in PLANETS:
+        if re.search(r"\b" + re.escape(p) + r"\b", lower):
+            return p
+    return None
+
+
 def detect_planet_opinion(text: str):
     """Detect whether the user expressed an opinion about a planet.
 
@@ -70,10 +80,11 @@ def detect_planet_opinion(text: str):
         return None, None
 
     for v in OPINION_VERBS:
+        # matches "I love X" or "love X" or "I love X very much"
         if re.search(r"\bi\s+" + re.escape(v) + r"\b", lower) or re.search(r"\b" + re.escape(v) + r"\s+" + re.escape(planet) + r"\b", lower):
             return planet, v
 
-    # check favorite constructions
+    # favorite constructions like "My favorite is Mars" -> treat as 'like'
     if "favorite" in lower or "favourite" in lower:
         return planet, "like"
 
@@ -89,7 +100,6 @@ def llm_conversation_reply(user_input: str, chat_history: List[Dict[str, str]], 
         # simple fallback
         return simple_reply(user_input, memories)
 
-    # Build messages: system persona, short context from memories, then chat history
     memory_context = "\n".join(f"- {m.get('text', '')}" for m in memories[:5])
     system = (
         "You are JimAI, a friendly space-savvy AI assistant with a sense of humor. "
@@ -98,16 +108,11 @@ def llm_conversation_reply(user_input: str, chat_history: List[Dict[str, str]], 
     )
 
     messages = [{"role": "system", "content": system}]
-
     if memory_context:
         messages.append({"role": "system", "content": f"Relevant memories:\n{memory_context}"})
-
-    # Add recent chat history (convert roles)
     for turn in chat_history:
         role = "user" if turn["role"] == "user" else "assistant"
         messages.append({"role": role, "content": turn["text"]})
-
-    # Finally add the current user input
     messages.append({"role": "user", "content": user_input})
 
     try:
@@ -123,13 +128,7 @@ def llm_conversation_reply(user_input: str, chat_history: List[Dict[str, str]], 
 
 
 def conversation_reply(user_input: str, chat_history: List[Dict[str, str]], memory: Memory, kb: KnowledgeBase) -> str:
-    """A rule-based conversation manager that sometimes delegates to the LLM for nicer replies.
-
-    Strategy:
-    - Short rules for greetings, preferences, identity, and follow-ups.
-    - Use KB or memories for factual questions first.
-    - If user asks for "explain" or "tell me more", or if we want a natural reply, call the LLM.
-    """
+    """Rule-based conversation manager which sometimes delegates to the LLM."""
     text = user_input.strip()
     lower = text.lower()
 
@@ -137,38 +136,28 @@ def conversation_reply(user_input: str, chat_history: List[Dict[str, str]], memo
     if any(g in lower for g in ("hello", "hi", "hey")):
         return "Hey! Ready for some star talk? Who's your favorite planet today?"
 
-    # Identity handled elsewhere in main loop, but keep fallback
+    # Identity fallback
     if any(p in lower for p in ("who are you", "what are you", "your name")):
         return "I’m JimAI — your space sidekick with a soft spot for meteor puns."
 
-    # Detect planet + opinion first
-    planet, verb = detect_planet_opinion(text)
-    if planet and verb:
-        # Save memory (main loop also saves non-questions, but be safe)
-        memory.add(f"User said: {text} at {datetime.now().isoformat(timespec='seconds')}")
-        planet_cap = planet.capitalize()
-        # Normalize verb for reply (you <verb> <planet>)
-        reply = f"Nice — I’ll remember you {verb} {planet_cap}. What else do you {verb} about {planet_cap}?"
-        return reply
-
-    # User expresses a preference or general statement -> save and follow up
-    if lower.startswith("i ") or lower.startswith("my "):
-        memory.add(f"User said: {text} at {datetime.now().isoformat(timespec='seconds')}")
-        return "Nice! What do you like most about that?"
-
     # If user explicitly asks for more detail, prefer LLM
     if any(phrase in lower for phrase in ("tell me more", "explain", "why", "how come", "why is")):
-        # Gather recent context and call LLM
         recent = [t for t in chat_history]
         recent_memories = memory.get_recent(limit=5)
         return llm_conversation_reply(user_input, recent, recent_memories)
 
     # If it's a question, prefer KB then memories
     if text.endswith("?"):
-        kb_matches = kb.find_relevant(text, limit=2)
+        # If user mentioned a planet, prefer KB facts that mention that planet name
+        planet_only = detect_planet_only(text)
+        kb_matches = kb.find_relevant(text, limit=5)
         if kb_matches:
-            fact = kb_matches[0].get("text")
-            return fact + "\n\n" + random.choice(HUMOR_LINES)
+            if planet_only:
+                for fact in kb_matches:
+                    if re.search(r"\b" + re.escape(planet_only) + r"\b", fact.get("text", "").lower()):
+                        return fact.get("text") + "\n\n" + random.choice(HUMOR_LINES)
+            # fallback to top KB fact
+            return kb_matches[0].get("text") + "\n\n" + random.choice(HUMOR_LINES)
 
         mem_matches = memory.find_relevant(text, limit=2, exclude_text=text)
         if mem_matches:
@@ -182,10 +171,9 @@ def conversation_reply(user_input: str, chat_history: List[Dict[str, str]], memo
                 reply = cleaned
             return reply + "\n\n" + random.choice(HUMOR_LINES)
 
-        # No direct KB or memory hit — ask a friendly clarifying question
         return "That's interesting — what would you like to know about space on that?"
 
-    # Fallback casual replies
+    # Fallback small talk
     return random.choice([
         "Space is big and so are my opinions.",
         "Ask me a question about planets or tell me something about yourself.",
@@ -194,7 +182,6 @@ def conversation_reply(user_input: str, chat_history: List[Dict[str, str]], memo
 
 
 def simple_reply(user_input: str, memories: list) -> str:
-    """Kept as a minimal fallback for offline/LLM-failed mode."""
     cleaned = user_input.strip()
     if not cleaned:
         return "I didn't catch that. Try asking me something else."
@@ -205,6 +192,8 @@ def main() -> None:
     memory = Memory("memory.json")
     kb = KnowledgeBase("space_facts.json")
     chat_history: List[Dict[str, str]] = []
+    # dialog_state holds transient expectations, e.g. expecting a planet follow-up answer
+    dialog_state: Dict[str, Optional[str]] = {"expecting": False, "type": None, "planet": None, "verb": None}
 
     print("JimAI: Hello! I can remember things, know some space facts, and have a conversation. Type 'exit' to stop.")
 
@@ -219,11 +208,13 @@ def main() -> None:
         # Push the user turn to chat history
         push_turn(chat_history, "user", user_input)
 
-        # Memory-management and identity remain simple here
+        # Memory-management commands
         if norm in {"clear memories", "clear memory", "forget all", "forget memories"}:
             memory.clear()
             print("JimAI: Okay — I forgot everything. My memory's a blank slate now.")
             push_turn(chat_history, "assistant", "Okay — I forgot everything.")
+            # also clear any dialog expectation
+            dialog_state = {"expecting": False, "type": None, "planet": None, "verb": None}
             continue
 
         if norm in {"forget last", "undo memory", "forget last memory"}:
@@ -232,6 +223,7 @@ def main() -> None:
             push_turn(chat_history, "assistant", "I forgot the last thing you told me.")
             continue
 
+        # Identity priority
         if any(p in norm for p in ("who are you", "what are you", "your name", "who am i talking to")):
             humor = random.choice(HUMOR_LINES)
             memory.add(f"Told user who I am at {datetime.now().isoformat(timespec='seconds')}")
@@ -240,30 +232,71 @@ def main() -> None:
             push_turn(chat_history, "assistant", reply)
             continue
 
+        # If we are expecting a follow-up answer (e.g. user was asked "What else do you like about Jupiter?")
+        if dialog_state.get("expecting"):
+            # handle the follow-up as an answer to the previous question
+            if dialog_state.get("type") == "planet_opinion":
+                planet = dialog_state.get("planet")
+                verb = dialog_state.get("verb") or "like"
+                user_answer = user_input.strip()
+                # Save a clear memory about the reason
+                memory.add(f"User said about {planet}: {user_answer} at {datetime.now().isoformat(timespec='seconds')}")
+                reply = f"Nice — I’ll remember that about {planet.capitalize()}. {random.choice(HUMOR_LINES)}"
+                print(f"JimAI: {reply}")
+                push_turn(chat_history, "assistant", reply)
+                # clear dialog state
+                dialog_state = {"expecting": False, "type": None, "planet": None, "verb": None}
+                continue
+            else:
+                # unknown expecting type: clear it and continue regular flow
+                dialog_state = {"expecting": False, "type": None, "planet": None, "verb": None}
+
         # Determine if this is a question
         is_question = user_input.strip().endswith("?")
 
-        # Prefer built-in knowledge for space questions
+        # If it's a question, prefer built-in knowledge for space questions (planet-priority handled inside)
         if is_question:
-            kb_matches = kb.find_relevant(user_input, limit=3)
+            planet_mentioned = detect_planet_only(user_input)
+            kb_matches = kb.find_relevant(user_input, limit=5)
             if kb_matches:
-                fact = kb_matches[0].get("text")
+                # prefer fact explicitly mentioning the planet if present
+                chosen_fact = None
+                if planet_mentioned:
+                    for fact in kb_matches:
+                        if re.search(r"\b" + re.escape(planet_mentioned) + r"\b", fact.get("text", "").lower()):
+                            chosen_fact = fact.get("text")
+                            break
+                if not chosen_fact:
+                    chosen_fact = kb_matches[0].get("text")
                 humor = random.choice(HUMOR_LINES)
-                memory.add(f"Told user a fact: {fact} at {datetime.now().isoformat(timespec='seconds')}")
-                reply = f"{fact}\n\n{humor}"
+                memory.add(f"Told user a fact: {chosen_fact} at {datetime.now().isoformat(timespec='seconds')}")
+                reply = f"{chosen_fact}\n\n{humor}"
                 print(f"JimAI: {reply}")
                 push_turn(chat_history, "assistant", reply)
                 continue
+
+        # If not question: check for planet-opinion (do this before general "i"/"my" detection)
+        planet, verb = detect_planet_opinion(user_input)
+        if planet and verb:
+            # Save the initial statement
+            memory.add(f"User said: {user_input} at {datetime.now().isoformat(timespec='seconds')}")
+            planet_cap = planet.capitalize()
+            # set dialog state so the next reply is treated as an answer to this follow-up
+            dialog_state = {"expecting": True, "type": "planet_opinion", "planet": planet, "verb": verb}
+            reply = f"Nice — I’ll remember you {verb} {planet_cap}. What else do you {verb} about {planet_cap}?"
+            print(f"JimAI: {reply}")
+            push_turn(chat_history, "assistant", reply)
+            continue
 
         # Only save the user's message as a memory if it's NOT a question
         if not is_question:
             memory.add(f"User said: {user_input} at {datetime.now().isoformat(timespec='seconds')}")
 
-        # If no KB match, try user memories for questions (exclude the current input to avoid matches)
+        # If question and no KB hit, try user memories for questions (exclude the current input)
         relevant_memories = memory.find_relevant(user_input, limit=5, exclude_text=user_input) if is_question else []
 
         if relevant_memories:
-            # create concise reply from the top memory
+            # concise reply from top memory
             top = relevant_memories[0]
             cleaned = memory._clean_memory_text(top.get("text", ""))
             cleaned_lower = cleaned.lower()
@@ -275,12 +308,11 @@ def main() -> None:
                 reply = cleaned
             humor = random.choice(HUMOR_LINES)
             memory.add(f"Told user from memory: {cleaned} at {datetime.now().isoformat(timespec='seconds')}")
-            print(f"JimAI: {reply} \n\n{humor}")
+            print(f"JimAI: {reply}\n\n{humor}")
             push_turn(chat_history, "assistant", reply)
             continue
 
         # No direct KB or memory hit — use the conversation manager (rule-based or LLM)
-        # conversation_reply will decide to call the LLM when appropriate
         reply = conversation_reply(user_input, chat_history, memory, kb)
         print(f"JimAI: {reply}")
         push_turn(chat_history, "assistant", reply)
