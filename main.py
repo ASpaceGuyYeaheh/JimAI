@@ -278,7 +278,7 @@ if is_question:
             reply = f"{chosen_fact}\n\n{humor}"
             print(f"JimAI: {reply}")
             push_turn(chat_history, "assistant", reply)
-            continue
+        continue
 
     # fallback: use the existing relevance-based KB lookup
     kb_matches = kb.find_relevant(user_input, limit=5)
