@@ -29,36 +29,41 @@ HUMOR_LINES = [
     "Somewhere between orbit and overthinking, I learned to be funny."
 ]
 
+# Commands the user can type to manage memories
+CLEAR_COMMANDS = {"clear memories", "clear memory", "forget all", "forget memories"}
+FORGET_LAST_COMMANDS = {"forget last", "undo memory", "forget last memory"}
+
 
 def simple_reply(user_input: str, memories: list) -> str:
     """A fallback local reply system for beginners.
 
-    If the user asks a question, and we have a relevant memory or fact,
-    we show it. Otherwise, we fall back to friendly canned replies.
+    This returns concise answers only (no memory lists) so the assistant feels cleaner.
     """
     cleaned = user_input.strip()
 
     if not cleaned:
         return "I didn't catch that. Try asking me something else."
 
+    # If the user asked a question and we have a memory, give a concise reply
     if cleaned.endswith("?") and memories:
-        lines = "\n".join(f"- {m.get('text', '')}" for m in memories[:5])
-        humor = random.choice(HUMOR_LINES)
-        return (
-            f"I found these memories related to your question:\n{lines}\n\n"
-            f"Short answer: (from my memory)\n{lines.splitlines()[0]}\n\n{humor}"
-        )
+        first = memories[0]
+        mem_text = first.get("text", "")
+        # If the memory is a user-statement like 'I love Jupiter', convert to 'You love Jupiter'
+        mem_text_lower = mem_text.lower()
+        if mem_text_lower.startswith("i "):
+            reply = "You " + mem_text[2:]
+        elif mem_text_lower.startswith("my "):
+            reply = "Your " + mem_text[3:]
+        else:
+            reply = mem_text
+        return reply + "\n\n" + random.choice(HUMOR_LINES)
 
+    # Non-question with memories: short acknowledgement
     if memories:
-        recent = "\n".join(f"- {m.get('text', '')}" for m in memories[:3])
-        return (
-            f"I remember: {recent}\n\n"
-            f"You said: {cleaned}\n"
-            f"I can keep that in mind and respond based on it. {random.choice(HUMOR_LINES)}"
-        )
+        return "Got it — I remembered that. " + random.choice(HUMOR_LINES)
 
     if "hello" in cleaned.lower() or "hi" in cleaned.lower():
-        return "Hi! I’m JimAI, your space-savvy assistant with a sense of humor. Ask me about planets, stars, or ask me anything else."
+        return "Hi! I’m JimAI, your space-savvy assistant with a sense of humor. Ask me about planets, stars, or tell me something to remember."
 
     if "your name" in cleaned.lower() or "who are you" in cleaned.lower():
         return "I’m JimAI, a space AI who remembers things and likes to crack (mild) space jokes."
@@ -101,10 +106,29 @@ def main() -> None:
 
     while True:
         user_input = input("You: ")
+        norm = user_input.strip().lower()
 
-        if user_input.strip().lower() in {"exit", "quit", "bye"}:
+        if norm in {"exit", "quit", "bye"}:
             print("JimAI: Goodbye! I’ll remember what we discussed.")
             break
+
+        # Memory management commands
+        if norm in CLEAR_COMMANDS:
+            memory.clear()
+            print("JimAI: Okay — I forgot everything. My memory's a blank slate now.")
+            continue
+
+        if norm in FORGET_LAST_COMMANDS:
+            memory.remove_last(1)
+            print("JimAI: I forgot the last thing you told me.")
+            continue
+
+        # Identity-priority: answer who/what you are before checking KB or memories
+        if any(p in norm for p in ("who are you", "what are you", "your name", "who am i talking to")):
+            humor = random.choice(HUMOR_LINES)
+            memory.add(f"Told user who I am at {datetime.now().isoformat(timespec='seconds')}")
+            print(f"JimAI: I’m JimAI — your space AI with a sense of humor. {humor}")
+            continue
 
         # Determine if this is a question first
         is_question = user_input.strip().endswith("?")
@@ -127,11 +151,25 @@ def main() -> None:
 
         # Use relevant memories first (if any), otherwise use the most recent ones
         if relevant_memories:
-            context_memories = relevant_memories
-        else:
-            context_memories = memory.get_recent(limit=5)
+            # create concise reply from the top memory
+            top = relevant_memories[0]
+            cleaned = memory._clean_memory_text(top.get("text", ""))
+            # convert simple first-person statements to second-person for replies
+            cleaned_lower = cleaned.lower()
+            if cleaned_lower.startswith("i "):
+                reply = "You " + cleaned[2:]
+            elif cleaned_lower.startswith("my "):
+                reply = "Your " + cleaned[3:]
+            else:
+                reply = cleaned
+            humor = random.choice(HUMOR_LINES)
+            memory.add(f"Told user from memory: {cleaned} at {datetime.now().isoformat(timespec='seconds')}")
+            print(f"JimAI: {reply} \n\n{humor}")
+            continue
 
-        # Create a cleaned context so displayed/replied memory text is friendly (no 'User said:' wrappers)
+        # No direct KB or memory hit — use recent context for a reply
+        context_memories = memory.get_recent(limit=5)
+        # Use cleaned context (no wrappers) when calling the LLM / simple reply
         cleaned_context = [
             {"text": memory._clean_memory_text(m.get("text", "")), "created_at": m.get("created_at")} for m in context_memories
         ]

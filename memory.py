@@ -139,6 +139,15 @@ class Memory:
         results = [t[2] for t in scores[:limit]]
         return results
 
+    def remove_last(self, n: int = 1) -> None:
+        """Remove the last n memories (useful for undoing a saved statement)."""
+        if n <= 0:
+            return
+        if not self.memories:
+            return
+        self.memories = self.memories[:-n] if len(self.memories) >= n else []
+        self._save()
+
     def get_all(self) -> List[Dict[str, Any]]:
         return self.memories
 
