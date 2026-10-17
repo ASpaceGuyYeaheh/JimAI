@@ -1,5 +1,6 @@
 import os
 import random
+import re
 from datetime import datetime
 from typing import List, Dict
 
@@ -30,6 +31,20 @@ HUMOR_LINES = [
     "Somewhere between orbit and overthinking, I learned to be funny."
 ]
 
+# Planets and opinion verbs for detecting planet mentions with opinions
+PLANETS = [
+    "mercury",
+    "venus",
+    "earth",
+    "mars",
+    "jupiter",
+    "saturn",
+    "uranus",
+    "neptune",
+    "pluto",
+]
+OPINION_VERBS = ["love", "like", "hate", "prefer", "enjoy", "dislike", "adore", "favor", "favourite", "favorite"]
+
 # Conversation history management
 CHAT_HISTORY_MAX = 8
 
@@ -38,6 +53,31 @@ def push_turn(history: List[Dict[str, str]], role: str, text: str) -> None:
     history.append({"role": role, "text": text, "time": datetime.now().isoformat(timespec="seconds")})
     while len(history) > CHAT_HISTORY_MAX:
         history.pop(0)
+
+
+def detect_planet_opinion(text: str):
+    """Detect whether the user expressed an opinion about a planet.
+
+    Returns (planet, verb) or (None, None).
+    """
+    lower = text.lower()
+    planet = None
+    for p in PLANETS:
+        if re.search(r"\b" + re.escape(p) + r"\b", lower):
+            planet = p
+            break
+    if not planet:
+        return None, None
+
+    for v in OPINION_VERBS:
+        if re.search(r"\bi\s+" + re.escape(v) + r"\b", lower) or re.search(r"\b" + re.escape(v) + r"\s+" + re.escape(planet) + r"\b", lower):
+            return planet, v
+
+    # check favorite constructions
+    if "favorite" in lower or "favourite" in lower:
+        return planet, "like"
+
+    return planet, None
 
 
 def llm_conversation_reply(user_input: str, chat_history: List[Dict[str, str]], memories: List[Dict[str, str]]) -> str:
@@ -101,9 +141,18 @@ def conversation_reply(user_input: str, chat_history: List[Dict[str, str]], memo
     if any(p in lower for p in ("who are you", "what are you", "your name")):
         return "I’m JimAI — your space sidekick with a soft spot for meteor puns."
 
-    # User expresses a preference or statement -> save and follow up
+    # Detect planet + opinion first
+    planet, verb = detect_planet_opinion(text)
+    if planet and verb:
+        # Save memory (main loop also saves non-questions, but be safe)
+        memory.add(f"User said: {text} at {datetime.now().isoformat(timespec='seconds')}")
+        planet_cap = planet.capitalize()
+        # Normalize verb for reply (you <verb> <planet>)
+        reply = f"Nice — I’ll remember you {verb} {planet_cap}. What else do you {verb} about {planet_cap}?"
+        return reply
+
+    # User expresses a preference or general statement -> save and follow up
     if lower.startswith("i ") or lower.startswith("my "):
-        # The main loop also saves non-questions, but we can ensure it's recorded here
         memory.add(f"User said: {text} at {datetime.now().isoformat(timespec='seconds')}")
         return "Nice! What do you like most about that?"
 

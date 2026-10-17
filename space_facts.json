@@ -4,8 +4,44 @@
     "text": "The Sun contains about 99.86% of the mass in the solar system."
   },
   {
+    "id": "mercury-fact",
+    "text": "Mercury is the closest planet to the Sun and has a very thin atmosphere, causing extreme temperature changes."
+  },
+  {
+    "id": "venus-fact",
+    "text": "Venus has a thick, toxic atmosphere and surface temperatures hot enough to melt lead — it's the hottest planet in the solar system."
+  },
+  {
+    "id": "earth-fact",
+    "text": "Earth is the only known planet with liquid water on its surface and life as we know it."
+  },
+  {
     "id": "moon-size",
     "text": "The Moon is about 1/4 the diameter of Earth, which is why lunar eclipses still cover the Sun from our view."
+  },
+  {
+    "id": "mars-day",
+    "text": "A day on Mars (a 'sol') is about 24 hours and 39 minutes — very close to an Earth day."
+  },
+  {
+    "id": "jupiter-fact",
+    "text": "Jupiter is the largest planet in the solar system and its Great Red Spot is a storm larger than Earth."
+  },
+  {
+    "id": "saturn-fact",
+    "text": "Saturn is famous for its beautiful rings, made mostly of ice and rock."
+  },
+  {
+    "id": "uranus-fact",
+    "text": "Uranus rotates on its side, likely because of a huge collision early in its history."
+  },
+  {
+    "id": "neptune-fact",
+    "text": "Neptune has the strongest winds in the solar system, reaching over 1,200 mph in some storms."
+  },
+  {
+    "id": "pluto-fact",
+    "text": "Pluto is a dwarf planet in the Kuiper Belt; it was reclassified from a planet in 2006."
   },
   {
     "id": "light-speed",
@@ -22,10 +58,6 @@
   {
     "id": "international-space-station",
     "text": "The International Space Station travels around Earth approximately every 90 minutes."
-  },
-  {
-    "id": "mars-day",
-    "text": "A day on Mars (a 'sol') is about 24 hours and 39 minutes — very close to an Earth day."
   },
   {
     "id": "universe-expansion",
