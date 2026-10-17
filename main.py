@@ -1,6 +1,7 @@
 import os
 import random
 from datetime import datetime
+from typing import List, Dict
 
 from memory import Memory
 from knowledge import KnowledgeBase
@@ -29,80 +30,134 @@ HUMOR_LINES = [
     "Somewhere between orbit and overthinking, I learned to be funny."
 ]
 
-# Commands the user can type to manage memories
-CLEAR_COMMANDS = {"clear memories", "clear memory", "forget all", "forget memories"}
-FORGET_LAST_COMMANDS = {"forget last", "undo memory", "forget last memory"}
+# Conversation history management
+CHAT_HISTORY_MAX = 8
 
 
-def simple_reply(user_input: str, memories: list) -> str:
-    """A fallback local reply system for beginners.
+def push_turn(history: List[Dict[str, str]], role: str, text: str) -> None:
+    history.append({"role": role, "text": text, "time": datetime.now().isoformat(timespec="seconds")})
+    while len(history) > CHAT_HISTORY_MAX:
+        history.pop(0)
 
-    This returns concise answers only (no memory lists) so the assistant feels cleaner.
+
+def llm_conversation_reply(user_input: str, chat_history: List[Dict[str, str]], memories: List[Dict[str, str]]) -> str:
+    """Call OpenAI chat completion using the recent chat history and relevant memories.
+
+    Falls back to simple_reply if OpenAI is not configured or call fails.
     """
-    cleaned = user_input.strip()
-
-    if not cleaned:
-        return "I didn't catch that. Try asking me something else."
-
-    # If the user asked a question and we have a memory, give a concise reply
-    if cleaned.endswith("?") and memories:
-        first = memories[0]
-        mem_text = first.get("text", "")
-        # If the memory is a user-statement like 'I love Jupiter', convert to 'You love Jupiter'
-        mem_text_lower = mem_text.lower()
-        if mem_text_lower.startswith("i "):
-            reply = "You " + mem_text[2:]
-        elif mem_text_lower.startswith("my "):
-            reply = "Your " + mem_text[3:]
-        else:
-            reply = mem_text
-        return reply + "\n\n" + random.choice(HUMOR_LINES)
-
-    # Non-question with memories: short acknowledgement
-    if memories:
-        return "Got it — I remembered that. " + random.choice(HUMOR_LINES)
-
-    if "hello" in cleaned.lower() or "hi" in cleaned.lower():
-        return "Hi! I’m JimAI, your space-savvy assistant with a sense of humor. Ask me about planets, stars, or tell me something to remember."
-
-    if "your name" in cleaned.lower() or "who are you" in cleaned.lower():
-        return "I’m JimAI, a space AI who remembers things and likes to crack (mild) space jokes."
-
-    return (
-        f"Thanks for saying: \"{cleaned}\". "
-        "I’m still learning, but I can remember what you tell me and use it in future conversations."
-    )
-
-
-def llm_reply(user_input: str, memories: list) -> str:
-    """Optional reply using OpenAI if the API key is available."""
     if openai is None or not os.getenv("OPENAI_API_KEY"):
+        # simple fallback
         return simple_reply(user_input, memories)
 
+    # Build messages: system persona, short context from memories, then chat history
     memory_context = "\n".join(f"- {m.get('text', '')}" for m in memories[:5])
+    system = (
+        "You are JimAI, a friendly space-savvy AI assistant with a sense of humor. "
+        "Keep replies short (1-3 sentences), ask at most one follow-up question when helpful, "
+        "and prefer conversational, engaging replies."
+    )
 
-    prompt = f"You are JimAI, a helpful space-savvy AI assistant. Keep replies short and friendly and add a little humor when appropriate.\n\nRelevant memories:\n{memory_context or 'No previous memories.'}\n\nUser: {user_input}\nAI:"
+    messages = [{"role": "system", "content": system}]
+
+    if memory_context:
+        messages.append({"role": "system", "content": f"Relevant memories:\n{memory_context}"})
+
+    # Add recent chat history (convert roles)
+    for turn in chat_history:
+        role = "user" if turn["role"] == "user" else "assistant"
+        messages.append({"role": role, "content": turn["text"]})
+
+    # Finally add the current user input
+    messages.append({"role": "user", "content": user_input})
 
     try:
         response = openai.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are JimAI, a friendly space AI with memory."},
-                {"role": "user", "content": prompt},
-            ],
+            messages=messages,
             temperature=0.7,
             max_tokens=200,
         )
         return response.choices[0].message.content.strip()
-    except Exception as exc:
-        return f"I tried to use the AI model, but it failed. Falling back to local mode. Error: {exc}\n\n{simple_reply(user_input, memories)}"
+    except Exception:
+        return simple_reply(user_input, memories)
+
+
+def conversation_reply(user_input: str, chat_history: List[Dict[str, str]], memory: Memory, kb: KnowledgeBase) -> str:
+    """A rule-based conversation manager that sometimes delegates to the LLM for nicer replies.
+
+    Strategy:
+    - Short rules for greetings, preferences, identity, and follow-ups.
+    - Use KB or memories for factual questions first.
+    - If user asks for "explain" or "tell me more", or if we want a natural reply, call the LLM.
+    """
+    text = user_input.strip()
+    lower = text.lower()
+
+    # Greetings
+    if any(g in lower for g in ("hello", "hi", "hey")):
+        return "Hey! Ready for some star talk? Who's your favorite planet today?"
+
+    # Identity handled elsewhere in main loop, but keep fallback
+    if any(p in lower for p in ("who are you", "what are you", "your name")):
+        return "I’m JimAI — your space sidekick with a soft spot for meteor puns."
+
+    # User expresses a preference or statement -> save and follow up
+    if lower.startswith("i ") or lower.startswith("my "):
+        # The main loop also saves non-questions, but we can ensure it's recorded here
+        memory.add(f"User said: {text} at {datetime.now().isoformat(timespec='seconds')}")
+        return "Nice! What do you like most about that?"
+
+    # If user explicitly asks for more detail, prefer LLM
+    if any(phrase in lower for phrase in ("tell me more", "explain", "why", "how come", "why is")):
+        # Gather recent context and call LLM
+        recent = [t for t in chat_history]
+        recent_memories = memory.get_recent(limit=5)
+        return llm_conversation_reply(user_input, recent, recent_memories)
+
+    # If it's a question, prefer KB then memories
+    if text.endswith("?"):
+        kb_matches = kb.find_relevant(text, limit=2)
+        if kb_matches:
+            fact = kb_matches[0].get("text")
+            return fact + "\n\n" + random.choice(HUMOR_LINES)
+
+        mem_matches = memory.find_relevant(text, limit=2, exclude_text=text)
+        if mem_matches:
+            cleaned = memory._clean_memory_text(mem_matches[0].get("text", ""))
+            cl_lower = cleaned.lower()
+            if cl_lower.startswith("i "):
+                reply = "You " + cleaned[2:]
+            elif cl_lower.startswith("my "):
+                reply = "Your " + cleaned[3:]
+            else:
+                reply = cleaned
+            return reply + "\n\n" + random.choice(HUMOR_LINES)
+
+        # No direct KB or memory hit — ask a friendly clarifying question
+        return "That's interesting — what would you like to know about space on that?"
+
+    # Fallback casual replies
+    return random.choice([
+        "Space is big and so are my opinions.",
+        "Ask me a question about planets or tell me something about yourself.",
+        "Want a neat space fact or a terrible space joke?",
+    ])
+
+
+def simple_reply(user_input: str, memories: list) -> str:
+    """Kept as a minimal fallback for offline/LLM-failed mode."""
+    cleaned = user_input.strip()
+    if not cleaned:
+        return "I didn't catch that. Try asking me something else."
+    return "I'm still learning — try asking about planets, stars, or tell me something to remember."
 
 
 def main() -> None:
     memory = Memory("memory.json")
     kb = KnowledgeBase("space_facts.json")
+    chat_history: List[Dict[str, str]] = []
 
-    print("JimAI: Hello! I can remember things and I know some space facts. Type 'exit' to stop.")
+    print("JimAI: Hello! I can remember things, know some space facts, and have a conversation. Type 'exit' to stop.")
 
     while True:
         user_input = input("You: ")
@@ -112,35 +167,44 @@ def main() -> None:
             print("JimAI: Goodbye! I’ll remember what we discussed.")
             break
 
-        # Memory management commands
-        if norm in CLEAR_COMMANDS:
+        # Push the user turn to chat history
+        push_turn(chat_history, "user", user_input)
+
+        # Memory-management and identity remain simple here
+        if norm in {"clear memories", "clear memory", "forget all", "forget memories"}:
             memory.clear()
             print("JimAI: Okay — I forgot everything. My memory's a blank slate now.")
+            push_turn(chat_history, "assistant", "Okay — I forgot everything.")
             continue
 
-        if norm in FORGET_LAST_COMMANDS:
+        if norm in {"forget last", "undo memory", "forget last memory"}:
             memory.remove_last(1)
             print("JimAI: I forgot the last thing you told me.")
+            push_turn(chat_history, "assistant", "I forgot the last thing you told me.")
             continue
 
-        # Identity-priority: answer who/what you are before checking KB or memories
         if any(p in norm for p in ("who are you", "what are you", "your name", "who am i talking to")):
             humor = random.choice(HUMOR_LINES)
             memory.add(f"Told user who I am at {datetime.now().isoformat(timespec='seconds')}")
-            print(f"JimAI: I’m JimAI — your space AI with a sense of humor. {humor}")
+            reply = f"I’m JimAI — your space AI with a sense of humor. {humor}"
+            print(f"JimAI: {reply}")
+            push_turn(chat_history, "assistant", reply)
             continue
 
-        # Determine if this is a question first
+        # Determine if this is a question
         is_question = user_input.strip().endswith("?")
 
         # Prefer built-in knowledge for space questions
-        kb_matches = kb.find_relevant(user_input, limit=3) if is_question else []
-        if kb_matches:
-            fact = kb_matches[0].get("text")
-            humor = random.choice(HUMOR_LINES)
-            memory.add(f"Told user a fact: {fact} at {datetime.now().isoformat(timespec='seconds')}")
-            print(f"JimAI: {fact} \n\n{humor}")
-            continue
+        if is_question:
+            kb_matches = kb.find_relevant(user_input, limit=3)
+            if kb_matches:
+                fact = kb_matches[0].get("text")
+                humor = random.choice(HUMOR_LINES)
+                memory.add(f"Told user a fact: {fact} at {datetime.now().isoformat(timespec='seconds')}")
+                reply = f"{fact}\n\n{humor}"
+                print(f"JimAI: {reply}")
+                push_turn(chat_history, "assistant", reply)
+                continue
 
         # Only save the user's message as a memory if it's NOT a question
         if not is_question:
@@ -149,12 +213,10 @@ def main() -> None:
         # If no KB match, try user memories for questions (exclude the current input to avoid matches)
         relevant_memories = memory.find_relevant(user_input, limit=5, exclude_text=user_input) if is_question else []
 
-        # Use relevant memories first (if any), otherwise use the most recent ones
         if relevant_memories:
             # create concise reply from the top memory
             top = relevant_memories[0]
             cleaned = memory._clean_memory_text(top.get("text", ""))
-            # convert simple first-person statements to second-person for replies
             cleaned_lower = cleaned.lower()
             if cleaned_lower.startswith("i "):
                 reply = "You " + cleaned[2:]
@@ -165,17 +227,14 @@ def main() -> None:
             humor = random.choice(HUMOR_LINES)
             memory.add(f"Told user from memory: {cleaned} at {datetime.now().isoformat(timespec='seconds')}")
             print(f"JimAI: {reply} \n\n{humor}")
+            push_turn(chat_history, "assistant", reply)
             continue
 
-        # No direct KB or memory hit — use recent context for a reply
-        context_memories = memory.get_recent(limit=5)
-        # Use cleaned context (no wrappers) when calling the LLM / simple reply
-        cleaned_context = [
-            {"text": memory._clean_memory_text(m.get("text", "")), "created_at": m.get("created_at")} for m in context_memories
-        ]
-
-        response = llm_reply(user_input, cleaned_context)
-        print(f"JimAI: {response}")
+        # No direct KB or memory hit — use the conversation manager (rule-based or LLM)
+        # conversation_reply will decide to call the LLM when appropriate
+        reply = conversation_reply(user_input, chat_history, memory, kb)
+        print(f"JimAI: {reply}")
+        push_turn(chat_history, "assistant", reply)
 
 
 if __name__ == "__main__":
